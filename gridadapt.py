@@ -15,6 +15,7 @@ from ratinabox.Agent import Agent
 from ratinabox.Neurons import PlaceCells, GridCells
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize
+from tqdm import tqdm
 
 def main():
 
@@ -38,10 +39,10 @@ def main():
 	Env = Environment(params={"aspect": 1, "scale": 1})
 
 	# 3 Add Agent.
-	Ag = Agent(Env)
+	Ag = Agent(Env)#, params={"dt": dt})
 	Agent.speed_mean = 0.5 #m/s
 	Ag.pos = np.array([0.5, 0.5])
-	n_steps = int(20/Ag.dt)
+	n_steps = int(200/Ag.dt)
 	tol_a=0.01
 	tol_s=0.01
 
@@ -58,10 +59,6 @@ def main():
 			"color": "C1",
 		},
 	)
-	# PCs.place_cell_centres[-1] = np.array([1.1, 0.5])
-
-	theta=0.1
-	g=0.1
 
 	h=np.zeros(N_mEC)
 	r=np.zeros(N_I)
@@ -91,7 +88,7 @@ def main():
 	snapshots = np.arange(0, n_steps, 200)
 	print(snapshots)
 
-	for step in range(n_steps):
+	for step in tqdm(range(n_steps)):
 
 		Ag.update()
 		PCs.update()
@@ -112,6 +109,9 @@ def main():
 		# print('r_inact', r_inact)
 		# print('\n')
 
+		theta=0.1
+		g=0.1
+
 		psi = transfer(r_act, theta, g, psi_sat)
 		a = np.mean(psi)
 		s = np.sum(psi)**2/(N_mEC*np.sum(psi**2)+0.00001)
@@ -120,6 +120,7 @@ def main():
 		delta_s = 1000
 
 		if (delta_a > tol_a) or (delta_s > tol_s):
+
 			# 1. find threshold to match sparsity
 
 			def sparsity (theta):
@@ -153,11 +154,11 @@ def main():
 			delta_a = np.abs(a - a0)/a0
 			delta_s = np.abs(s - s0)/s0
 
+			print('a', a)
+			print('s', s)
+
 		# print('theta', theta)
 		# print('g', g)
-
-		# print('a', a)
-		# print('s', s)
 
 		psi = transfer(r_act, theta, g, psi_sat)
 		psi_tempmean += psi 
@@ -169,7 +170,7 @@ def main():
 		# build the firing field for visualization
 		xt, yt = Ag.pos
 		_trajectory[:, step] = Ag.pos
-		_kernel_map = _kernel(xs - xt, ys - yt, _dx, _dy)
+		_kernel_map = _kernel(xs - xt, ys - yt)
 		# print(_kernel_map)
 		_firing_fields += psi[:, None, None] * _kernel_map[None, :, :] / n_steps
 		_place_fields += r[:, None, None] * _kernel_map[None,:,:] / n_steps
@@ -177,6 +178,7 @@ def main():
 		if step in snapshots:
 			print(step)
 			fig, axs = plt.subplots(4, 6, figsize=(12, 6))
+			plt.tight_layout()
 			for i, (n_id, ax) in enumerate(zip(neuron_ids, axs.ravel())):
 				ax.imshow(_firing_fields[n_id], origin='lower', extent=[x_min, x_max, y_min, y_max])
 				# ax.imshow(_place_fields[n_id], origin='lower', extent=[x_min, x_max, y_min, y_max])
@@ -206,12 +208,9 @@ def Heaviside(h):
 	_h[np.where(h<0)] = 0.
 	return _h
 
-def _kernel (x, y, _dx, _dy, sigma=.01):
-	# sigma=0.5*max(_dx, _dy)
+def _kernel (x, y, sigma=.05):
 	_z = 0.5 * (x**2 + y**2) / (2 * sigma**2)
 	_norm = 1.
-	# _norm = 2 * np.pi * sigma
-	# print(np.exp(-_z)/_norm)
 	return np.exp(-_z)/_norm
 
 if __name__ == "__main__":
