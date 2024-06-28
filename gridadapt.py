@@ -49,12 +49,12 @@ def main():
 	Env = Environment(params={"aspect": 1, "scale": 1})
 
 	# 3 Add Agent.
-	Ag = Agent(Env)#, params={"dt": dt})
+	Ag = Agent(Env, params={"dt": dt})
 	Agent.speed_mean = 0.5 #m/s
 	Ag.pos = np.array([0.5, 0.5])
 	n_steps = int(2000/Ag.dt)
-	tol_a=0.01
-	tol_s=0.01
+	tol_a=0.1
+	tol_s=0.1
 
 	# 4 Add place cells.
 	PCs = PlaceCells(
@@ -77,14 +77,11 @@ def main():
 	psi=np.zeros(N_mEC)
 	psi_tempmean=np.zeros(N_mEC)
 	r_tempmean=np.zeros(N_I)
-	J=np.random.random((N_mEC, N_I))
-	J1=np.copy(J)
-	# J=np.ones((N_mEC, N_I))
-	# J1=np.ones((N_mEC, N_I))
+	J=np.zeros((N_mEC, N_I))
 
-	print(J)
-	print(J1)
-
+	J = 0.9 + 0.1*np.random.uniform(size=(N_mEC, N_I)) # random weights (from hc to ec) initialization
+	sum_weight = np.sum(J**2, axis=1)
+	J /= np.sqrt(sum_weight)[:,None]
 
 	# create space domain to visualize firing fields
 	x_min, y_min = 0., 0. # ...
@@ -103,10 +100,9 @@ def main():
 	neuron_ids = np.random.choice(N_mEC, 4*6) #np.arange(6)
 	place_ids = np.random.choice(N_I, 4*6) #np.arange(6)
 	snapshots = np.arange(0, n_steps, 200)
-	print(snapshots)
 
-	theta=0.1
-	g=0.1
+	theta=0.01
+	g=0.01
 
 	for step in tqdm(range(n_steps)):
 
@@ -171,8 +167,8 @@ def main():
 			delta_a = np.abs(a - a0)/a0
 			delta_s = np.abs(s - s0)/s0
 
-			# print('a', a)
-			# print('s', s)
+			print('a', a)
+			print('s', s)
 
 			# print('theta', theta)
 			# print('g', g)
@@ -181,18 +177,26 @@ def main():
 			psi_tempmean += psi 
 			r_tempmean += r 
 
+			# update weights
 			J += lr*( psi[:,None]*r[None,:] - (psi_tempmean[:,None] * r_tempmean[None,:])/(step+1)**2 ) 
-		# for i in range(N_mEC):
-		# 	for j in range(N_I):
-		# 		J1[i,j] += lr*( psi[i]*r[j] - psi_tempmean[i]*r_tempmean[j]/(step+1)**2)
-		# print(J)
-		# print(J1)
+
+			# set negative values to zero
+			J[np.where(J<0)] = 0.
+			# exit()
+
+			# for each unit in mEC, normalize all ingoing weights onto it to the sum of all of them 
+			for k in range(N_mEC):
+				if np.sum(J[k, :]) > 1.0e-20:
+					J[k, :] /= np.sqrt(np.sum(J[k, :]))
+				else: 
+					J[k, :] /= np.sqrt(N_I)
+
 		# build the firing field for visualization
 		xt, yt = Ag.pos
 		_trajectory[:, step] = Ag.pos
 		_kernel_map = _kernel(xs - xt, ys - yt)
-		_place_fields += r[:, None, None] * _kernel_map[None,:,:] / n_steps
-		_firing_fields += psi[:, None, None] * _kernel_map[None, :, :] / n_steps
+		_place_fields += r[:, None, None] * _kernel_map[None,:,:] #/ n_steps
+		_firing_fields += psi[:, None, None] * _kernel_map[None, :, :] #/ n_steps
 
 		if step in snapshots:
 			# print(step)
