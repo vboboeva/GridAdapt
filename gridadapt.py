@@ -41,7 +41,7 @@ def main():
 	Ag = Agent(Env)
 	Agent.speed_mean = 0.5 #m/s
 	Ag.pos = np.array([0.5, 0.5])
-	n_steps = int(2000/Ag.dt)
+	n_steps = int(20/Ag.dt)
 	tol_a=0.01
 	tol_s=0.01
 
@@ -87,6 +87,9 @@ def main():
 
 
 	_trajectory = np.zeros((2,n_steps))
+	neuron_ids = np.random.choice(N_mEC, 4*6) #np.arange(6)
+	snapshots = np.arange(0, n_steps, 200)
+	print(snapshots)
 
 	for step in range(n_steps):
 
@@ -150,55 +153,40 @@ def main():
 			delta_a = np.abs(a - a0)/a0
 			delta_s = np.abs(s - s0)/s0
 
+		# print('theta', theta)
+		# print('g', g)
+
+		# print('a', a)
+		# print('s', s)
 
 		psi = transfer(r_act, theta, g, psi_sat)
 		psi_tempmean += psi 
-		# print('psi_tempmean', psi_tempmean)
-		# print('\n')
 		r_tempmean += r 
-		# print('r_tempmean', r_tempmean)
-		# print('\n')
 
 		# J += lr*(np.outer(psi,r) - np.outer(psi_tempmean, r_tempmean))
 		J += lr*( psi[:,None]*r[None,:] - (psi_tempmean[:,None] * r_tempmean[None,:])/(step+1)**2 ) 
 
-		# print('theta', theta)
-		# print('g', g)
-
-		print('a', a)
-		print('s', s)
-
 		# build the firing field for visualization
 		xt, yt = Ag.pos
-		# print(type(Ag.pos)); exit()
 		_trajectory[:, step] = Ag.pos
 		_kernel_map = _kernel(xs - xt, ys - yt, _dx, _dy)
 		# print(_kernel_map)
 		_firing_fields += psi[:, None, None] * _kernel_map[None, :, :] / n_steps
 		_place_fields += r[:, None, None] * _kernel_map[None,:,:] / n_steps
-		# plt.imshow(_firing_fields[0])
-		# plt.show()
-		# exit()
-	# print('_place_fields', _place_fields)
-	# fig = plt.figure()
-	# fig, ax = PCs.plot_rate_map(chosen_neurons="3",  method="neither", spikes=True) # plots the rate map of the neurons at all positions
-	# fig.savefig('figs/test.png')
-	# print('psi', psi)
-	neuron_ids = np.random.choice(N_mEC, 4*5)#np.arange(6)
-	fig, axs = plt.subplots(3, 4, figsize=(20, 6))
-	for i, (n_id, ax) in enumerate(zip(neuron_ids, axs.ravel())):
-		ax.imshow(_firing_fields[i], origin='lower', extent=[x_min, x_max, y_min, y_max])
-		# ax.imshow(_place_fields[i], origin='lower', extent=[x_min, x_max, y_min, y_max])
-		ax.scatter([PCs.place_cell_centres[i][0]],[PCs.place_cell_centres[i][1]], c='r', s=1)
-		# ax.set_title(f"Neurxn {n_id}")
-	fig.savefig('figs/heatmap.svg')
-	
-	fig1 = plt.figure()
-	plt.plot(*_trajectory, c='r')
-	fig1.savefig('figs/trajectory.png')
 
-	print(Ag.pos)
-
+		if step in snapshots:
+			print(step)
+			fig, axs = plt.subplots(4, 6, figsize=(12, 6))
+			for i, (n_id, ax) in enumerate(zip(neuron_ids, axs.ravel())):
+				ax.imshow(_firing_fields[n_id], origin='lower', extent=[x_min, x_max, y_min, y_max])
+				# ax.imshow(_place_fields[n_id], origin='lower', extent=[x_min, x_max, y_min, y_max])
+				ax.scatter([PCs.place_cell_centres[n_id][0]],[PCs.place_cell_centres[n_id][1]], c='r', s=1)
+				ax.set_title(f"Neuron {n_id}")
+			fig.savefig('heatmap_%s.svg'%step)
+			
+			fig1 = plt.figure()
+			plt.plot(*_trajectory, c='r')
+			fig1.savefig('trajectory_%s.svg'%step)
 	return
 
 # FUNCTIONS
