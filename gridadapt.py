@@ -5,6 +5,7 @@ Created on 24 Jun 24
 
 @author: vb
 """
+
 import numpy as np
 import random
 import os
@@ -87,8 +88,7 @@ def main():
 
 	_trajectory = np.zeros((2,n_steps))
 
-	for i, step in enumerate(range(n_steps)):
-		print('i', i)
+	for step in range(n_steps):
 
 		Ag.update()
 		PCs.update()
@@ -96,7 +96,7 @@ def main():
 		# fig, ax = Ag.plot_trajectory()
 		# fig, ax = PCs.plot_rate_timeseries()
 
-		r = np.ravel(PCs.history['firingrate'][i])
+		r = np.ravel(PCs.history['firingrate'][step])
 		# print('r', r)
 		# print('\n')
 		h += dt*(np.dot(J, r))/tau  
@@ -110,33 +110,27 @@ def main():
 		# print('\n')
 
 		psi = transfer(r_act, theta, g, psi_sat)
-		psi_tempmean += psi / n_steps
-		# print('psi_tempmean', psi_tempmean)
-		# print('\n')
-		r_tempmean += r / n_steps
-		# print('r_tempmean', r_tempmean)
-		# print('\n')
-
 		a = np.mean(psi)
 		s = np.sum(psi)**2/(N_mEC*np.sum(psi**2)+0.00001)
 
-		delta_a = a-a0
-		delta_s = s-s0
+		delta_a = 1000
+		delta_s = 1000
 
 		if (delta_a > tol_a) or (delta_s > tol_s):
 			# 1. find threshold to match sparsity
-			def sparsity (theta, g):
+
+			def sparsity (theta):
 				psi = transfer(r_act, theta, g, psi_sat)
 				s = np.sum(psi)**2/(N_mEC*np.sum(psi**2)+0.00001)
 				return s
 
 			def distance(x):
-				_theta, _g = x
-				s = sparsity(_theta, _g)
+				_theta = x
+				s = sparsity(_theta)
 				return (s-s0)**2
 
-			opt = minimize(distance, np.array([theta, g]))
-			theta, g = opt['x']
+			opt = minimize(distance, np.array([theta]))
+			theta = opt['x'][0]
 
 			# 2. find gain to match activity
 			def activity (theta, g):
@@ -156,8 +150,17 @@ def main():
 			delta_a = np.abs(a - a0)/a0
 			delta_s = np.abs(s - s0)/s0
 
-			# J += lr*(np.outer(psi,r) - np.outer(psi_tempmean, r_tempmean))
-			J += lr*( psi[:,None]*r[None,:] - (psi_tempmean[:,None] * r_tempmean[None,:]) ) 
+
+		psi = transfer(r_act, theta, g, psi_sat)
+		psi_tempmean += psi 
+		# print('psi_tempmean', psi_tempmean)
+		# print('\n')
+		r_tempmean += r 
+		# print('r_tempmean', r_tempmean)
+		# print('\n')
+
+		# J += lr*(np.outer(psi,r) - np.outer(psi_tempmean, r_tempmean))
+		J += lr*( psi[:,None]*r[None,:] - (psi_tempmean[:,None] * r_tempmean[None,:])/(step+1)**2 ) 
 
 		# print('theta', theta)
 		# print('g', g)
@@ -168,7 +171,7 @@ def main():
 		# build the firing field for visualization
 		xt, yt = Ag.pos
 		# print(type(Ag.pos)); exit()
-		_trajectory[:, i] = Ag.pos
+		_trajectory[:, step] = Ag.pos
 		_kernel_map = _kernel(xs - xt, ys - yt, _dx, _dy)
 		# print(_kernel_map)
 		_firing_fields += psi[:, None, None] * _kernel_map[None, :, :] / n_steps
