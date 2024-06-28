@@ -9,6 +9,7 @@ Created on 24 Jun 24
 import numpy as np
 import random
 import os
+from os.path import join
 import ratinabox
 from ratinabox.Environment import Environment
 from ratinabox.Agent import Agent
@@ -20,6 +21,7 @@ from tqdm import tqdm
 def main():
 
 	SimulationName="test"
+	random.seed(2024)
 	N_I=200
 	N_mEC=100
 	dt=0.001
@@ -33,7 +35,15 @@ def main():
 	lr=0.001
 
 	ratinabox.autosave_plots = True
-	ratinabox.figure_directory = "figs/"
+	ratinabox.figure_directory = "figs"
+	figs_directory = "figs"
+	out_directory = "outputs"
+	place_directory = join(figs_directory, 'place_fields')
+	grid_directory = join(figs_directory, 'grid_fields')
+	traj_directory = join(figs_directory, 'trajectories')
+
+	for d in [out_directory, place_directory, grid_directory, traj_directory]:
+		os.makedirs(d, exist_ok=True)
 
 	# 1 Initialise environment.
 	Env = Environment(params={"aspect": 1, "scale": 1})
@@ -42,7 +52,7 @@ def main():
 	Ag = Agent(Env)#, params={"dt": dt})
 	Agent.speed_mean = 0.5 #m/s
 	Ag.pos = np.array([0.5, 0.5])
-	n_steps = int(200/Ag.dt)
+	n_steps = int(2000/Ag.dt)
 	tol_a=0.01
 	tol_s=0.01
 
@@ -68,6 +78,12 @@ def main():
 	psi_tempmean=np.zeros(N_mEC)
 	r_tempmean=np.zeros(N_I)
 	J=np.random.random((N_mEC, N_I))
+	J1=np.copy(J)
+	# J=np.ones((N_mEC, N_I))
+	# J1=np.ones((N_mEC, N_I))
+
+	print(J)
+	print(J1)
 
 
 	# create space domain to visualize firing fields
@@ -85,8 +101,12 @@ def main():
 
 	_trajectory = np.zeros((2,n_steps))
 	neuron_ids = np.random.choice(N_mEC, 4*6) #np.arange(6)
+	place_ids = np.random.choice(N_I, 4*6) #np.arange(6)
 	snapshots = np.arange(0, n_steps, 200)
 	print(snapshots)
+
+	theta=0.1
+	g=0.1
 
 	for step in tqdm(range(n_steps)):
 
@@ -108,9 +128,6 @@ def main():
 		r_inact += dt*(h-r_inact)/tau_2
 		# print('r_inact', r_inact)
 		# print('\n')
-
-		theta=0.1
-		g=0.1
 
 		psi = transfer(r_act, theta, g, psi_sat)
 		a = np.mean(psi)
@@ -150,45 +167,63 @@ def main():
 			opt = minimize(distance, np.array([theta, g]))
 			theta, g = opt['x']
 
-			# 3. compute errors
+			# 3. compute relative errors
 			delta_a = np.abs(a - a0)/a0
 			delta_s = np.abs(s - s0)/s0
 
-			print('a', a)
-			print('s', s)
+			# print('a', a)
+			# print('s', s)
 
-		# print('theta', theta)
-		# print('g', g)
+			# print('theta', theta)
+			# print('g', g)
 
-		psi = transfer(r_act, theta, g, psi_sat)
-		psi_tempmean += psi 
-		r_tempmean += r 
+			psi = transfer(r_act, theta, g, psi_sat)
+			psi_tempmean += psi 
+			r_tempmean += r 
 
-		# J += lr*(np.outer(psi,r) - np.outer(psi_tempmean, r_tempmean))
-		J += lr*( psi[:,None]*r[None,:] - (psi_tempmean[:,None] * r_tempmean[None,:])/(step+1)**2 ) 
-
+			J += lr*( psi[:,None]*r[None,:] - (psi_tempmean[:,None] * r_tempmean[None,:])/(step+1)**2 ) 
+		# for i in range(N_mEC):
+		# 	for j in range(N_I):
+		# 		J1[i,j] += lr*( psi[i]*r[j] - psi_tempmean[i]*r_tempmean[j]/(step+1)**2)
+		# print(J)
+		# print(J1)
 		# build the firing field for visualization
 		xt, yt = Ag.pos
 		_trajectory[:, step] = Ag.pos
 		_kernel_map = _kernel(xs - xt, ys - yt)
-		# print(_kernel_map)
-		_firing_fields += psi[:, None, None] * _kernel_map[None, :, :] / n_steps
 		_place_fields += r[:, None, None] * _kernel_map[None,:,:] / n_steps
+		_firing_fields += psi[:, None, None] * _kernel_map[None, :, :] / n_steps
 
 		if step in snapshots:
-			print(step)
-			fig, axs = plt.subplots(4, 6, figsize=(12, 6))
+			# print(step)
+			fig1, axs1 = plt.subplots(4, 6, figsize=(12, 6))
+			fig2, axs2 = plt.subplots(4, 6, figsize=(12, 6))
 			plt.tight_layout()
-			for i, (n_id, ax) in enumerate(zip(neuron_ids, axs.ravel())):
-				ax.imshow(_firing_fields[n_id], origin='lower', extent=[x_min, x_max, y_min, y_max])
-				# ax.imshow(_place_fields[n_id], origin='lower', extent=[x_min, x_max, y_min, y_max])
-				ax.scatter([PCs.place_cell_centres[n_id][0]],[PCs.place_cell_centres[n_id][1]], c='r', s=1)
-				ax.set_title(f"Neuron {n_id}")
-			fig.savefig('heatmap_%s.svg'%step)
-			
-			fig1 = plt.figure()
-			plt.plot(*_trajectory, c='r')
-			fig1.savefig('trajectory_%s.svg'%step)
+
+			for i, (id1, id2, ax1, ax2) in enumerate(zip(place_ids, neuron_ids, axs1.ravel(), axs2.ravel())):
+				# plot reconstructed place fields
+				ax1.set_title(f"Neuron {id1}")
+				ax1.imshow(_place_fields[id1], origin='lower', extent=[x_min, x_max, y_min, y_max])
+				ax1.scatter([PCs.place_cell_centres[id1][0]],[PCs.place_cell_centres[id1][1]], c='r', s=1)
+
+				# plot psi fields
+				ax2.set_title(f"Neuron {id2}")
+				ax2.imshow(_firing_fields[id2], origin='lower', extent=[x_min, x_max, y_min, y_max])
+				ax2.scatter([PCs.place_cell_centres[id2][0]],[PCs.place_cell_centres[id2][1]], c='r', s=1)
+
+			fig1.savefig(join(place_directory, 'heatmap_%s.svg'%step))
+			plt.close(fig1)
+
+			fig2.savefig(join(grid_directory, 'heatmap_%s.svg'%step))
+			plt.close(fig2)
+
+			fig, ax = plt.subplots()
+			ax.plot(*_trajectory, c='r')
+			fig.savefig(join(traj_directory, 'trajectory_%s.svg'%step))
+			plt.close(fig)
+
+	np.save(join(out_directory, "place_fields.npy"), _place_fields)
+	np.save(join(out_directory, "firing_fields.npy"), _firing_fields)
 	return
 
 # FUNCTIONS
