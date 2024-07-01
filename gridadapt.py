@@ -64,7 +64,7 @@ def main():
 			"description": "gaussian_threshold",
 			"widths": 0.40,
 			"wall_geometry": "line_of_sight",
-			"max_fr": 1,
+			"max_fr": 2./np.pi,
 			"min_fr": 0.1,
 			"color": "C1",
 		},
@@ -77,7 +77,9 @@ def main():
 	psi=np.zeros(N_mEC)
 	psi_tempmean=np.zeros(N_mEC)
 	r_tempmean=np.zeros(N_I)
-	J=np.zeros((N_mEC, N_I))
+
+	# J=np.zeros((N_mEC, N_I))
+	# J=np.random.random((N_mEC, N_I))
 
 	J = 0.9 + 0.1*np.random.uniform(size=(N_mEC, N_I)) # random weights (from hc to ec) initialization
 	sum_weight = np.sum(J**2, axis=1)
@@ -184,7 +186,7 @@ def main():
 			J[np.where(J<0)] = 0.
 			# exit()
 
-			# for each unit in mEC, normalize all ingoing weights onto it to the sum of all of them 
+			## for each unit in mEC, normalize all ingoing weights onto it to the sum of all of them 
 			for k in range(N_mEC):
 				if np.sum(J[k, :]) > 1.0e-20:
 					J[k, :] /= np.sqrt(np.sum(J[k, :]))
