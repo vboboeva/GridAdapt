@@ -25,7 +25,6 @@ def main():
 	N_I=200
 	N_mEC=100
 	dt=0.01
-	tau=1
 	tau_1=10
 	tau_2=30
 	psi_sat=10
@@ -119,7 +118,7 @@ def main():
 		r = np.ravel(PCs.history['firingrate'][step])
 		# print('r', r)
 		# print('\n')
-		h += dt*(np.dot(J, r))/tau  
+		h = np.dot(J, r)  
 		# print('h', h)
 		# print('\n')
 		r_act += dt*(h-r_inact-r_act)/tau_1
