@@ -24,11 +24,11 @@ def main():
 	random.seed(2024)
 	N_I=200
 	N_mEC=100
-	dt=0.001
+	dt=0.01
 	tau=1
 	tau_1=10
 	tau_2=30
-	psi_sat=30
+	psi_sat=10
 	a0=0.1*psi_sat # 0.1 is fraction of active neurons
 	s0=0.3 
 	epsilon=0.001
@@ -50,9 +50,9 @@ def main():
 
 	# 3 Add Agent.
 	Ag = Agent(Env, params={"dt": dt})
-	Agent.speed_mean = 0.5 #m/s
+	Agent.speed_mean = 1 #m/s
 	Ag.pos = np.array([0.5, 0.5])
-	n_steps = int(2000/Ag.dt)
+	n_steps = int(1e7)
 	tol_a=0.1
 	tol_s=0.1
 
@@ -70,13 +70,14 @@ def main():
 		},
 	)
 
-	h=np.zeros(N_mEC)
 	r=np.zeros(N_I)
+	r_tempmean=np.zeros(N_I)
+	
+	h=np.zeros(N_mEC)
 	r_act=np.zeros(N_mEC)
 	r_inact=np.zeros(N_mEC)
 	psi=np.zeros(N_mEC)
 	psi_tempmean=np.zeros(N_mEC)
-	r_tempmean=np.zeros(N_I)
 
 	# J=np.zeros((N_mEC, N_I))
 	# J=np.random.random((N_mEC, N_I))
@@ -101,12 +102,13 @@ def main():
 	_trajectory = np.zeros((2,n_steps))
 	neuron_ids = np.random.choice(N_mEC, 4*6) #np.arange(6)
 	place_ids = np.random.choice(N_I, 4*6) #np.arange(6)
-	snapshots = np.arange(0, n_steps, 200)
+	snapshots = np.arange(0, n_steps, 1000)
 
-	theta=0.01
-	g=0.01
+	theta=0.0
+	g=1
 
 	for step in tqdm(range(n_steps)):
+		# print(step)
 
 		Ag.update()
 		PCs.update()
@@ -131,67 +133,88 @@ def main():
 		a = np.mean(psi)
 		s = np.sum(psi)**2/(N_mEC*np.sum(psi**2)+0.00001)
 
-		delta_a = 1000
-		delta_s = 1000
+		# delta_a = 1000
+		# delta_s = 1000
 
-		if (delta_a > tol_a) or (delta_s > tol_s):
+		# if (delta_a > tol_a) or (delta_s > tol_s):
 
-			# 1. find threshold to match sparsity
+		# 	# 1. find threshold to match sparsity
 
-			def sparsity (theta):
-				psi = transfer(r_act, theta, g, psi_sat)
-				s = np.sum(psi)**2/(N_mEC*np.sum(psi**2)+0.00001)
-				return s
+		# 	def sparsity (theta):
+		# 		psi = transfer(r_act, theta, g, psi_sat)
+		# 		s = np.sum(psi)**2/(N_mEC*np.sum(psi**2)+0.00001)
+		# 		return s
 
-			def distance(x):
-				_theta = x
-				s = sparsity(_theta)
-				return (s-s0)**2
+		# 	def distance(x):
+		# 		_theta = x
+		# 		s = sparsity(_theta)
+		# 		return (s-s0)**2
 
-			opt = minimize(distance, np.array([theta]))
-			theta = opt['x'][0]
+		# 	opt = minimize(distance, np.array([theta]))
+		# 	theta = opt['x'][0]
 
-			# 2. find gain to match activity
-			def activity (theta, g):
-				psi = transfer(r_act, theta, g, psi_sat)
-				a = np.mean(psi)
-				return a
+		# 	# 2. find gain to match activity
+		# 	def activity (theta, g):
+		# 		psi = transfer(r_act, theta, g, psi_sat)
+		# 		a = np.mean(psi)
+		# 		return a
 
-			def distance(x):
-				_theta, _g = x
-				a = activity(_theta,_g)
-				return (a-a0)**2
+		# 	def distance(x):
+		# 		_theta, _g = x
+		# 		a = activity(_theta,_g)
+		# 		return (a-a0)**2
 
-			opt = minimize(distance, np.array([theta, g]))
-			theta, g = opt['x']
+		# 	opt = minimize(distance, np.array([theta, g]))
+		# 	theta, g = opt['x']
 
-			# 3. compute relative errors
-			delta_a = np.abs(a - a0)/a0
-			delta_s = np.abs(s - s0)/s0
+		# 	# 3. compute relative errors
+		# 	delta_a = np.abs(a - a0)/a0
+		# 	delta_s = np.abs(s - s0)/s0
 
-			print('a', a)
-			print('s', s)
+		# 	# print('theta', theta)
+		# 	# print('g', g)
 
-			# print('theta', theta)
-			# print('g', g)
+		# 	psi = transfer(r_act, theta, g, psi_sat)
 
-			psi = transfer(r_act, theta, g, psi_sat)
-			psi_tempmean += psi 
-			r_tempmean += r 
+		# 	psi_tempmean += psi 
+		# 	r_tempmean += r 
+################################################
 
-			# update weights
-			J += lr*( psi[:,None]*r[None,:] - (psi_tempmean[:,None] * r_tempmean[None,:])/(step+1)**2 ) 
 
-			# set negative values to zero
-			J[np.where(J<0)] = 0.
-			# exit()
+		# print('before')
+		# print('a', a)
+		# print('s', s)
 
-			## for each unit in mEC, normalize all ingoing weights onto it to the sum of all of them 
-			for k in range(N_mEC):
-				if np.sum(J[k, :]) > 1.0e-20:
-					J[k, :] /= np.sqrt(np.sum(J[k, :]))
-				else: 
-					J[k, :] /= np.sqrt(N_I)
+		count=0
+		while count < 30: #(delta_a > tol_a) or (delta_s > tol_s):
+			psi = Sparsify(psi, s0)
+			psi = psi/(np.mean(psi)+0.00001)
+
+			a = np.mean(psi)
+			s = np.sum(psi)**2/(N_mEC*np.sum(psi**2)+0.00001)
+
+			count+=1
+
+		# print('after')
+		# print('a', a)
+		# print('s', s)
+
+		psi_tempmean += psi 
+		r_tempmean += r
+		
+		# update weights
+		J += lr*( psi[:,None]*r[None,:] - (psi_tempmean[:,None] * r_tempmean[None,:])/(step+1)**2 ) 
+
+		# set negative values to zero
+		J[np.where(J<0)] = 0.
+		# exit()
+
+		## for each unit in mEC, normalize all ingoing weights onto it to the sum of all of them 
+		for k in range(N_mEC):
+			if np.sum(J[k, :]) > 1.0e-20:
+				J[k, :] /= np.sqrt(np.sum(J[k, :]))
+			else: 
+				J[k, :] /= np.sqrt(N_I)
 
 		# build the firing field for visualization
 		xt, yt = Ag.pos
@@ -201,7 +224,7 @@ def main():
 		_firing_fields += psi[:, None, None] * _kernel_map[None, :, :] #/ n_steps
 
 		if step in snapshots:
-			# print(step)
+			print(step)
 			fig1, axs1 = plt.subplots(4, 6, figsize=(12, 6))
 			fig2, axs2 = plt.subplots(4, 6, figsize=(12, 6))
 			plt.tight_layout()
@@ -225,7 +248,7 @@ def main():
 
 			fig, ax = plt.subplots()
 			ax.plot(*_trajectory, c='r')
-			fig.savefig(join(traj_directory, 'trajectory_%s.svg'%step))
+			fig.savefig(join(traj_directory, 'trajectory.svg'))
 			plt.close(fig)
 
 	np.save(join(out_directory, "place_fields.npy"), _place_fields)
@@ -253,6 +276,23 @@ def _kernel (x, y, sigma=.05):
 	_z = 0.5 * (x**2 + y**2) / (2 * sigma**2)
 	_norm = 1.
 	return np.exp(-_z)/_norm
+
+def Sparsify(h, s0):
+        vout=h
+        th=np.percentile(h, (1.0-s0)*100)
+        vout = [0 if x < th else x-th for x in vout]
+        return vout
+
+
+# def Sparsify(V, theta):
+# 	vout=V
+# 	th=np.percentile(V,(1.0-f)*100)
+# 	for i in range(len(V)):
+# 		if vout[i]<th:
+# 			vout[i]=0
+# 		else:
+# 			vout[i]=vout[i]-th
+# 	return vout
 
 if __name__ == "__main__":
 	main()
