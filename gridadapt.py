@@ -63,7 +63,7 @@ def main():
 			"description": "gaussian_threshold",
 			"widths": 0.40,
 			"wall_geometry": "line_of_sight",
-			"max_fr": 2./np.pi,
+			"max_fr": 1,
 			"min_fr": 0.1,
 			"color": "C1",
 		},
@@ -132,54 +132,6 @@ def main():
 		a = np.mean(psi)
 		s = np.sum(psi)**2/(N_mEC*np.sum(psi**2)+0.00001)
 
-		# delta_a = 1000
-		# delta_s = 1000
-
-		# if (delta_a > tol_a) or (delta_s > tol_s):
-
-		# 	# 1. find threshold to match sparsity
-
-		# 	def sparsity (theta):
-		# 		psi = transfer(r_act, theta, g, psi_sat)
-		# 		s = np.sum(psi)**2/(N_mEC*np.sum(psi**2)+0.00001)
-		# 		return s
-
-		# 	def distance(x):
-		# 		_theta = x
-		# 		s = sparsity(_theta)
-		# 		return (s-s0)**2
-
-		# 	opt = minimize(distance, np.array([theta]))
-		# 	theta = opt['x'][0]
-
-		# 	# 2. find gain to match activity
-		# 	def activity (theta, g):
-		# 		psi = transfer(r_act, theta, g, psi_sat)
-		# 		a = np.mean(psi)
-		# 		return a
-
-		# 	def distance(x):
-		# 		_theta, _g = x
-		# 		a = activity(_theta,_g)
-		# 		return (a-a0)**2
-
-		# 	opt = minimize(distance, np.array([theta, g]))
-		# 	theta, g = opt['x']
-
-		# 	# 3. compute relative errors
-		# 	delta_a = np.abs(a - a0)/a0
-		# 	delta_s = np.abs(s - s0)/s0
-
-		# 	# print('theta', theta)
-		# 	# print('g', g)
-
-		# 	psi = transfer(r_act, theta, g, psi_sat)
-
-		# 	psi_tempmean += psi 
-		# 	r_tempmean += r 
-################################################
-
-
 		# print('before')
 		# print('a', a)
 		# print('s', s)
@@ -195,8 +147,8 @@ def main():
 			count+=1
 
 		# print('after')
-		# print('a', a)
-		# print('s', s)
+		print('a', a)
+		print('s', s)
 
 		psi_tempmean += psi 
 		r_tempmean += r
@@ -219,8 +171,8 @@ def main():
 		xt, yt = Ag.pos
 		_trajectory[:, step] = Ag.pos
 		_kernel_map = _kernel(xs - xt, ys - yt)
-		_place_fields += r[:, None, None] * _kernel_map[None,:,:] #/ n_steps
-		_firing_fields += psi[:, None, None] * _kernel_map[None, :, :] #/ n_steps
+		_place_fields += r[:, None, None] * _kernel_map[None,:,:] / n_steps
+		_firing_fields += psi[:, None, None] * _kernel_map[None, :, :] / n_steps
 
 		if step in snapshots:
 			print(step)
@@ -295,3 +247,52 @@ def Sparsify(h, s0):
 
 if __name__ == "__main__":
 	main()
+
+
+
+		# delta_a = 1000
+		# delta_s = 1000
+
+		# if (delta_a > tol_a) or (delta_s > tol_s):
+
+		# 	# 1. find threshold to match sparsity
+
+		# 	def sparsity (theta):
+		# 		psi = transfer(r_act, theta, g, psi_sat)
+		# 		s = np.sum(psi)**2/(N_mEC*np.sum(psi**2)+0.00001)
+		# 		return s
+
+		# 	def distance(x):
+		# 		_theta = x
+		# 		s = sparsity(_theta)
+		# 		return (s-s0)**2
+
+		# 	opt = minimize(distance, np.array([theta]))
+		# 	theta = opt['x'][0]
+
+		# 	# 2. find gain to match activity
+		# 	def activity (theta, g):
+		# 		psi = transfer(r_act, theta, g, psi_sat)
+		# 		a = np.mean(psi)
+		# 		return a
+
+		# 	def distance(x):
+		# 		_theta, _g = x
+		# 		a = activity(_theta,_g)
+		# 		return (a-a0)**2
+
+		# 	opt = minimize(distance, np.array([theta, g]))
+		# 	theta, g = opt['x']
+
+		# 	# 3. compute relative errors
+		# 	delta_a = np.abs(a - a0)/a0
+		# 	delta_s = np.abs(s - s0)/s0
+
+		# 	# print('theta', theta)
+		# 	# print('g', g)
+
+		# 	psi = transfer(r_act, theta, g, psi_sat)
+
+		# 	psi_tempmean += psi 
+		# 	r_tempmean += r 
+################################################
