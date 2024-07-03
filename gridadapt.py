@@ -25,8 +25,8 @@ def main():
 	N_I=200
 	N_mEC=100
 	dt=0.01
-	tau_1=10
-	tau_2=30
+	tau_1=0.1
+	tau_2=1
 	psi_sat=10
 	a0=0.1*psi_sat # 0.1 is fraction of active neurons
 	s0=0.3 
@@ -106,7 +106,7 @@ def main():
 	theta=0.0
 	g=1
 
-	for step in tqdm(range(n_steps)):
+	for step in range(n_steps):
 		# print(step)
 
 		Ag.update()
@@ -129,32 +129,25 @@ def main():
 		# print('\n')
 
 		psi = transfer(r_act, theta, g, psi_sat)
+
+		psi = Sparsify(psi, s0)
+		a = np.mean(psi)
+
+		g = g/(a+0.00001)
+		psi = transfer(r_act, theta, g, psi_sat)
+
 		a = np.mean(psi)
 		s = np.sum(psi)**2/(N_mEC*np.sum(psi**2)+0.00001)
-
-		# print('before')
-		# print('a', a)
-		# print('s', s)
-
-		count=0
-		while count < 30: #(delta_a > tol_a) or (delta_s > tol_s):
-			psi = Sparsify(psi, s0)
-			psi = psi/(np.mean(psi)+0.00001)
-
-			a = np.mean(psi)
-			s = np.sum(psi)**2/(N_mEC*np.sum(psi**2)+0.00001)
-
-			count+=1
 
 		# print('after')
 		print('a', a)
 		print('s', s)
 
-		psi_tempmean += psi 
-		r_tempmean += r
-		
+		psi_tempmean = (psi + step*psi_tempmean)/(step+1)
+		r_tempmean = (r + step*r_tempmean)/(step+1) 
+
 		# update weights
-		J += lr*( psi[:,None]*r[None,:] - (psi_tempmean[:,None] * r_tempmean[None,:])/(step+1)**2 ) 
+		J += lr*( psi[:,None]*r[None,:] - (psi_tempmean[:,None] * r_tempmean[None,:]) ) 
 
 		# set negative values to zero
 		J[np.where(J<0)] = 0.
@@ -189,7 +182,7 @@ def main():
 				# plot psi fields
 				ax2.set_title(f"Neuron {id2}")
 				ax2.imshow(_firing_fields[id2], origin='lower', extent=[x_min, x_max, y_min, y_max])
-				ax2.scatter([PCs.place_cell_centres[id2][0]],[PCs.place_cell_centres[id2][1]], c='r', s=1)
+				# ax2.scatter([PCs.place_cell_centres[id2][0]],[PCs.place_cell_centres[id2][1]], c='r', s=1)
 
 			fig1.savefig(join(place_directory, 'heatmap_%s.svg'%step))
 			plt.close(fig1)
@@ -223,7 +216,7 @@ def Heaviside(h):
 	_h[np.where(h<0)] = 0.
 	return _h
 
-def _kernel (x, y, sigma=.05):
+def _kernel (x, y, sigma=.025):
 	_z = 0.5 * (x**2 + y**2) / (2 * sigma**2)
 	_norm = 1.
 	return np.exp(-_z)/_norm
