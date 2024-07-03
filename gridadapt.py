@@ -64,7 +64,7 @@ def main():
 			"description": "gaussian_threshold",
 			"widths": 0.40,
 			"wall_geometry": "line_of_sight",
-			"max_fr": 2./np.pi,
+			"max_fr": 1.0,
 			"min_fr": 0.1,
 			"color": "C1",
 		},
@@ -117,7 +117,7 @@ def main():
 		r = np.ravel(PCs.history['firingrate'][step])
 		# print('r', r)
 		# print('\n')
-		h += dt*(np.dot(J, r))/tau  
+		h = np.dot(J, r)/N_I  
 		# print('h', h)
 		# print('\n')
 		r_act += dt*(h-r_inact-r_act)/tau_1
@@ -129,41 +129,43 @@ def main():
 
 		psi = transfer(r_act, theta, g, psi_sat)
 		a = np.mean(psi)
-		s = np.sum(psi)**2/(N_mEC*np.sum(psi**2)+0.00001)
+		s = np.mean(psi)**2/(np.mean(psi**2)+0.00001)
 
 		delta_a = 1000
 		delta_s = 1000
 
 		if (delta_a > tol_a) or (delta_s > tol_s):
 
-			# 1. find threshold to match sparsity
+			# plt.hist(r_act, density=True)
+			# plt.show()
+			# exit()
 
-			def sparsity (theta):
-				psi = transfer(r_act, theta, g, psi_sat)
-				s = np.sum(psi)**2/(N_mEC*np.sum(psi**2)+0.00001)
-				return s
-
-			def distance(x):
-				_theta = x
-				s = sparsity(_theta)
-				return (s-s0)**2
-
-			opt = minimize(distance, np.array([theta]))
-			theta = opt['x'][0]
-
-			# 2. find gain to match activity
-			def activity (theta, g):
+			def activity_and_sparsity (theta, g):
 				psi = transfer(r_act, theta, g, psi_sat)
 				a = np.mean(psi)
-				return a
+				s = np.mean(psi)**2/(np.mean(psi**2)+0.00001)
+				return a, s
 
 			def distance(x):
 				_theta, _g = x
-				a = activity(_theta,_g)
-				return (a-a0)**2
+				a, s = activity_and_sparsity(_theta,_g)
+				return (a-a0)**2 + 0.23*(s-s0)**2
 
-			opt = minimize(distance, np.array([theta, g]))
+			opt = minimize(distance, np.array([theta, g]),
+					method='Nelder-Mead',
+					options=dict(
+						# bounds=[(0,np.max(r_act)),(0.00001, 100.)],
+						initial_simplex=np.array([
+								[0.,.00001],
+								[np.max(r_act),100000.],
+								[np.max(r_act),.00001],
+							]),
+						)
+				)
+			
 			theta, g = opt['x']
+
+			a, s = activity_and_sparsity(theta, g)
 
 			# 3. compute relative errors
 			delta_a = np.abs(a - a0)/a0
@@ -176,11 +178,12 @@ def main():
 			# print('g', g)
 
 			psi = transfer(r_act, theta, g, psi_sat)
-			psi_tempmean += psi 
-			r_tempmean += r 
+
+			psi_tempmean = (psi + step*psi_tempmean)/(step+1)
+			r_tempmean = (r + step*r_tempmean)/(step+1) 
 
 			# update weights
-			J += lr*( psi[:,None]*r[None,:] - (psi_tempmean[:,None] * r_tempmean[None,:])/(step+1)**2 ) 
+			J += lr*( psi[:,None]*r[None,:] - psi_tempmean[:,None]*r_tempmean[None,:]) 
 
 			# set negative values to zero
 			J[np.where(J<0)] = 0.
