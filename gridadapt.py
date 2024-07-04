@@ -22,14 +22,14 @@ def main():
 
 	SimulationName="test"
 	random.seed(2024)
-	N_I=200
-	N_mEC=100
+	N_I=400
+	N_mEC=50
 	dt=0.01
-	tau_1=0.1
-	tau_2=1
-	psi_sat=10
+	tau_1=10
+	tau_2=30
+	psi_sat=30
 	a0=0.1*psi_sat # 0.1 is fraction of active neurons
-	s0=0.3 
+	s0=0.3
 	epsilon=0.001
 	lr=0.001
 
@@ -45,12 +45,12 @@ def main():
 		os.makedirs(d, exist_ok=True)
 
 	# 1 Initialise environment.
-	Env = Environment(params={"aspect": 1, "scale": 1})
+	Env = Environment(params={"aspect": 1, "scale": 20})
 
 	# 3 Add Agent.
 	Ag = Agent(Env, params={"dt": dt})
-	Agent.speed_mean = 1 #m/s
-	Ag.pos = np.array([0.5, 0.5])
+	Agent.speed_mean = 3 #m/s
+	Ag.pos = np.array([10, 10])
 	n_steps = int(1e7)
 	tol_a=0.1
 	tol_s=0.1
@@ -60,8 +60,8 @@ def main():
 		Ag,
 		params={
 			"n": N_I,
-			"description": "gaussian_threshold",
-			"widths": 0.40,
+			"description": "gaussian",
+			"widths": 1,
 			"wall_geometry": "line_of_sight",
 			"max_fr": 1,
 			"min_fr": 0.1,
@@ -83,13 +83,13 @@ def main():
 
 	J = 0.9 + 0.1*np.random.uniform(size=(N_mEC, N_I)) # random weights (from hc to ec) initialization
 	sum_weight = np.sum(J**2, axis=1)
-	J /= np.sqrt(sum_weight)[:,None]
+	J /= np.sqrt(sum_weight)[:, None]
 
 	# create space domain to visualize firing fields
 	x_min, y_min = 0., 0. # ...
-	x_max, y_max = 1., 1. # ...
-	n_points_x = 30
-	n_points_y = 30
+	x_max, y_max = 20., 20. # ...
+	n_points_x = 40
+	n_points_y = 40
 	_dx, _dy = (x_max - x_min)/n_points_x, (y_max - y_min)/n_points_y
 	xs, ys = np.meshgrid(np.linspace(x_min, x_max, n_points_x),
 						 np.linspace(y_min, y_max, n_points_y)
@@ -99,8 +99,8 @@ def main():
 
 
 	_trajectory = np.zeros((2,n_steps))
-	neuron_ids = np.random.choice(N_mEC, 4*6) #np.arange(6)
-	place_ids = np.random.choice(N_I, 4*6) #np.arange(6)
+	neuron_ids = np.arange(50) # np.random.choice(N_mEC, 4) 
+	place_ids = np.arange(50) # np.random.choice(N_I, 3) 
 	snapshots = np.arange(0, n_steps, 1000)
 
 	theta=0.0
@@ -118,7 +118,7 @@ def main():
 		r = np.ravel(PCs.history['firingrate'][step])
 		# print('r', r)
 		# print('\n')
-		h = np.dot(J, r)  
+		h = np.dot(J, r)/N_I  
 		# print('h', h)
 		# print('\n')
 		r_act += dt*(h-r_inact-r_act)/tau_1
@@ -129,17 +129,15 @@ def main():
 		# print('\n')
 
 		psi = transfer(r_act, theta, g, psi_sat)
-
+		# s = np.mean(psi)**2/(np.mean(psi**2)+0.00001)
+		# print('before sparsify', s)
 		psi = Sparsify(psi, s0)
+		# s = np.mean(psi)**2/(np.mean(psi**2)+0.00001)
+		# print('after sparsify', s)
+		psi = psi/(np.mean(psi)+0.00001)
+		s = np.mean(psi)**2/(np.mean(psi**2)+0.00001)
 		a = np.mean(psi)
 
-		g = g/(a+0.00001)
-		psi = transfer(r_act, theta, g, psi_sat)
-
-		a = np.mean(psi)
-		s = np.sum(psi)**2/(N_mEC*np.sum(psi**2)+0.00001)
-
-		# print('after')
 		print('a', a)
 		print('s', s)
 
@@ -147,18 +145,17 @@ def main():
 		r_tempmean = (r + step*r_tempmean)/(step+1) 
 
 		# update weights
-		J += lr*( psi[:,None]*r[None,:] - (psi_tempmean[:,None] * r_tempmean[None,:]) ) 
+		J += lr*( psi[:,None]*r[None,:] - (psi_tempmean[:,None]*r_tempmean[None,:]) ) 
 
 		# set negative values to zero
 		J[np.where(J<0)] = 0.
 		# exit()
 
 		## for each unit in mEC, normalize all ingoing weights onto it to the sum of all of them 
-		for k in range(N_mEC):
-			if np.sum(J[k, :]) > 1.0e-20:
-				J[k, :] /= np.sqrt(np.sum(J[k, :]))
-			else: 
-				J[k, :] /= np.sqrt(N_I)
+		sum_weight = np.sum(J**2, axis=1)
+		J /= np.sqrt(sum_weight)[:,None]
+
+		# print(J)
 
 		# build the firing field for visualization
 		xt, yt = Ag.pos
@@ -169,8 +166,8 @@ def main():
 
 		if step in snapshots:
 			print(step)
-			fig1, axs1 = plt.subplots(4, 6, figsize=(12, 6))
-			fig2, axs2 = plt.subplots(4, 6, figsize=(12, 6))
+			fig1, axs1 = plt.subplots(5, 10, figsize=(12, 6))
+			fig2, axs2 = plt.subplots(5, 10, figsize=(12, 6))
 			plt.tight_layout()
 
 			for i, (id1, id2, ax1, ax2) in enumerate(zip(place_ids, neuron_ids, axs1.ravel(), axs2.ravel())):
@@ -207,7 +204,7 @@ def _saturating (x):
 	return _z
 
 def transfer(h, theta, g, psi_sat):
-	_psi = psi_sat*_saturating(g*(h-theta))*Heaviside(h-theta)
+	_psi = Heaviside(h-theta) # *psi_sat*_saturating(g*(h-theta))
 	return _psi
 
 def Heaviside(h):
@@ -216,17 +213,20 @@ def Heaviside(h):
 	_h[np.where(h<0)] = 0.
 	return _h
 
-def _kernel (x, y, sigma=.025):
+def _kernel (x, y, sigma=.5):
 	_z = 0.5 * (x**2 + y**2) / (2 * sigma**2)
 	_norm = 1.
 	return np.exp(-_z)/_norm
 
-def Sparsify(h, s0):
-        vout=h
-        th=np.percentile(h, (1.0-s0)*100)
+def Sparsify(field, s0):
+        vout=field
+        # print('vout', vout)
+        th=np.percentile(vout, (1.0-s0)*100)
+        # print('th', th)
         vout = [0 if x < th else x-th for x in vout]
-        return vout
-
+        # print('vout', vout)
+        # exit()
+        return np.array(vout)
 
 # def Sparsify(V, theta):
 # 	vout=V
