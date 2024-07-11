@@ -25,7 +25,6 @@ def main():
 	N_I=200
 	N_mEC=100
 	dt=0.001
-	tau=1
 	tau_1=10
 	tau_2=30
 	psi_sat=30
@@ -33,6 +32,7 @@ def main():
 	s0=0.3 
 	epsilon=0.001
 	lr=0.001
+	L=20
 
 	ratinabox.autosave_plots = True
 	ratinabox.figure_directory = "figs"
@@ -46,13 +46,13 @@ def main():
 		os.makedirs(d, exist_ok=True)
 
 	# 1 Initialise environment.
-	Env = Environment(params={"aspect": 1, "scale": 1})
+	Env = Environment(params={"aspect": 1, "scale": L})
 
 	# 3 Add Agent.
 	Ag = Agent(Env, params={"dt": dt})
-	Agent.speed_mean = 0.5 #m/s
-	Ag.pos = np.array([0.5, 0.5])
-	n_steps = int(2000/Ag.dt)
+	Agent.speed_mean = 0.5 # m/s
+	Ag.pos = np.array([L/2., L/2.]) # initial position of agent
+	n_steps = 200000
 	tol_a=0.1
 	tol_s=0.1
 
@@ -62,10 +62,10 @@ def main():
 		params={
 			"n": N_I,
 			"description": "gaussian_threshold",
-			"widths": 0.40,
+			"widths": 0.05*L, # width of place cell of size 5% of entire arena
 			"wall_geometry": "line_of_sight",
-			"max_fr": 2./np.pi,
-			"min_fr": 0.1,
+			"max_fr": 1,
+			"min_fr": 0,
 			"color": "C1",
 		},
 	)
@@ -87,9 +87,9 @@ def main():
 
 	# create space domain to visualize firing fields
 	x_min, y_min = 0., 0. # ...
-	x_max, y_max = 1., 1. # ...
-	n_points_x = 30
-	n_points_y = 30
+	x_max, y_max = L, L # ...
+	n_points_x = 50
+	n_points_y = 50
 	_dx, _dy = (x_max - x_min)/n_points_x, (y_max - y_min)/n_points_y
 	xs, ys = np.meshgrid(np.linspace(x_min, x_max, n_points_x),
 						 np.linspace(y_min, y_max, n_points_y)
@@ -98,7 +98,7 @@ def main():
 	_place_fields = np.zeros((N_I, n_points_x, n_points_y, ))
 
 
-	_trajectory = np.zeros((2,n_steps))
+	_trajectory = np.zeros((2, n_steps))
 	neuron_ids = np.random.choice(N_mEC, 4*6) #np.arange(6)
 	place_ids = np.random.choice(N_I, 4*6) #np.arange(6)
 	snapshots = np.arange(0, n_steps, 200)
@@ -117,7 +117,7 @@ def main():
 		r = np.ravel(PCs.history['firingrate'][step])
 		# print('r', r)
 		# print('\n')
-		h += dt*(np.dot(J, r))/tau  
+		h = np.dot(J, r)  
 		# print('h', h)
 		# print('\n')
 		r_act += dt*(h-r_inact-r_act)/tau_1
@@ -176,33 +176,31 @@ def main():
 			# print('g', g)
 
 			psi = transfer(r_act, theta, g, psi_sat)
-			psi_tempmean += psi 
-			r_tempmean += r 
+
+			psi_tempmean = (psi + step*psi_tempmean)/(step+1)
+			r_tempmean = (r + step*r_tempmean)/(step+1)
 
 			# update weights
-			J += lr*( psi[:,None]*r[None,:] - (psi_tempmean[:,None] * r_tempmean[None,:])/(step+1)**2 ) 
+			J += lr*( psi[:,None]*r[None,:] - (psi_tempmean[:,None]*r_tempmean[None,:]) ) 
 
 			# set negative values to zero
 			J[np.where(J<0)] = 0.
-			# exit()
 
 			## for each unit in mEC, normalize all ingoing weights onto it to the sum of all of them 
-			for k in range(N_mEC):
-				if np.sum(J[k, :]) > 1.0e-20:
-					J[k, :] /= np.sqrt(np.sum(J[k, :]))
-				else: 
-					J[k, :] /= np.sqrt(N_I)
+			sum_weight = np.sum(J**2, axis=1)
+			J /= np.sqrt(sum_weight)[:,None]
 
 		# build the firing field for visualization
 		xt, yt = Ag.pos
 		_trajectory[:, step] = Ag.pos
-		_kernel_map = _kernel(xs - xt, ys - yt)
+		_kernel_map = _kernel(L, xs - xt, ys - yt)
 		_place_fields += r[:, None, None] * _kernel_map[None,:,:] #/ n_steps
 		_firing_fields += psi[:, None, None] * _kernel_map[None, :, :] #/ n_steps
 
 		if step in snapshots:
 			# print(step)
 			fig1, axs1 = plt.subplots(4, 6, figsize=(12, 6))
+			plt.tight_layout()
 			fig2, axs2 = plt.subplots(4, 6, figsize=(12, 6))
 			plt.tight_layout()
 
@@ -249,7 +247,8 @@ def Heaviside(h):
 	_h[np.where(h<0)] = 0.
 	return _h
 
-def _kernel (x, y, sigma=.05):
+def _kernel (L, x, y, sigma=.05):
+	sigma=sigma*L
 	_z = 0.5 * (x**2 + y**2) / (2 * sigma**2)
 	_norm = 1.
 	return np.exp(-_z)/_norm
