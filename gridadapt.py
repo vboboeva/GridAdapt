@@ -21,17 +21,17 @@ from tqdm import tqdm
 def main():
 
 	SimulationName="test"
+	# default values are reported in brackets
 	random.seed(2024)
-	N_I=400
-	N_mEC=50
-	dt=0.01
-	tau_1=10
-	tau_2=30
-	psi_sat=30
-	a0=0.1*psi_sat # 0.1 is fraction of active neurons
-	s0=0.3
-	epsilon=0.001
-	lr=0.001
+	N_I=200 # [200]
+	N_mEC=100 # [100]
+	dt=0.01 # [?]
+	tau_1=1 # [b1=dt/tau_1=0.01]
+	tau_2=3 # [b2=dt/tau_2=b1/3=0.01/3=0.003]
+	psi_sat=30 # [30]
+	a0=0.1*psi_sat # 0.1 is fraction of active neurons [0.1*psi_sat]
+	s0=0.3 # [0.3]
+	lr=0.001 # [epsilon in paper = 0.001]
 
 	ratinabox.autosave_plots = True
 	ratinabox.figure_directory = "figs"
@@ -62,8 +62,7 @@ def main():
 			"n": N_I,
 			"description": "gaussian",
 			"widths": 1,
-			"wall_geometry": "line_of_sight",
-			"max_fr": 1,
+			"max_fr": 30,
 			"min_fr": 0.1,
 			"color": "C1",
 		},
@@ -116,30 +115,33 @@ def main():
 		# fig, ax = PCs.plot_rate_timeseries()
 
 		r = np.ravel(PCs.history['firingrate'][step])
-		# print('r', r)
-		# print('\n')
-		h = np.dot(J, r)/N_I  
-		# print('h', h)
-		# print('\n')
-		r_act += dt*(h-r_inact-r_act)/tau_1
-		# print('r_act', r_act)
-		# print('\n')
-		r_inact += dt*(h-r_inact)/tau_2
-		# print('r_inact', r_inact)
-		# print('\n')
+		for neuron_idx in range(N_mEC):
+			# print('r', r)
+			# print('\n')
+			h[neuron_idx] = np.dot(J[neuron_idx], r)/N_I  
+			# print('h', h)
+			# print('\n')
+			r_act[neuron_idx] += dt*(h[neuron_idx]-r_inact[neuron_idx]-r_act[neuron_idx])/tau_1
+			# print('r_act', r_act)
+			# print('\n')
+			r_inact[neuron_idx] += dt*(h[neuron_idx]-r_inact[neuron_idx])/tau_2
+			# print('r_inact', r_inact)
+			# print('\n')
 
-		psi = transfer(r_act, theta, g, psi_sat)
+			psi[neuron_idx] = transfer(r_act[neuron_idx], theta, g, psi_sat)
 		# s = np.mean(psi)**2/(np.mean(psi**2)+0.00001)
+		# print(psi)
 		# print('before sparsify', s)
 		psi = Sparsify(psi, s0)
+		# print(psi)
 		# s = np.mean(psi)**2/(np.mean(psi**2)+0.00001)
 		# print('after sparsify', s)
 		psi = psi/(np.mean(psi)+0.00001)
 		s = np.mean(psi)**2/(np.mean(psi**2)+0.00001)
 		a = np.mean(psi)
 
-		print('a', a)
-		print('s', s)
+		print('a', a, a0)
+		print('s', s, s0)
 
 		psi_tempmean = (psi + step*psi_tempmean)/(step+1)
 		r_tempmean = (r + step*r_tempmean)/(step+1) 
@@ -151,7 +153,7 @@ def main():
 		J[np.where(J<0)] = 0.
 		# exit()
 
-		## for each unit in mEC, normalize all ingoing weights onto it to the sum of all of them 
+		# for each unit in mEC, normalize all ingoing weights onto it to the sum of all of them 
 		sum_weight = np.sum(J**2, axis=1)
 		J /= np.sqrt(sum_weight)[:,None]
 
@@ -167,6 +169,7 @@ def main():
 		if step in snapshots:
 			print(step)
 			fig1, axs1 = plt.subplots(5, 10, figsize=(12, 6))
+			plt.tight_layout()
 			fig2, axs2 = plt.subplots(5, 10, figsize=(12, 6))
 			plt.tight_layout()
 
@@ -199,19 +202,19 @@ def main():
 # FUNCTIONS
 
 def _saturating (x):
-	_z = 2./np.pi*np.arctan(x)
-	_z[np.where(x > 50)] = 1.
+	_z = 2.*np.arctan(x)/np.pi
+	# _z[np.where(x > 50)] = 1.
 	return _z
 
 def transfer(h, theta, g, psi_sat):
-	_psi = Heaviside(h-theta) # *psi_sat*_saturating(g*(h-theta))
+	_psi = Heaviside(h-theta)*psi_sat*_saturating(g*(h-theta))
 	return _psi
 
 def Heaviside(h):
-	# _h = np.array([_x if _x>=0 else 0 for _x in x])
-	_h = h.copy()
-	_h[np.where(h<0)] = 0.
-	return _h
+	# _h = h.copy()
+	# _h[np.where(h<0)] = 0.
+	# return _h
+	return h if h>0. else 0.
 
 def _kernel (x, y, sigma=.5):
 	_z = 0.5 * (x**2 + y**2) / (2 * sigma**2)
